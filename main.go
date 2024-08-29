@@ -18,7 +18,17 @@ type requestBody struct {
 
 // Обработчик для GET-запроса
 func HelloHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hello, %s!\n", message)
+	var messages []Message
+
+	// Извлекаем все записи из базы данных
+	if err := DB.Find(&messages).Error; err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Преобразуем слайс сообщений в JSON и отправляем клиенту
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(messages)
 }
 
 // Обработчик для POST-запроса
@@ -30,12 +40,29 @@ func MessageHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	// Обновляем глобальную переменную message
+
+	// Создаём новую запись Message с текстом из запроса
+	newMessage := Message{Text: reqBody.Message}
+
+	// Сохраняем новое сообщение в базу данных
+	if err := DB.Create(&newMessage).Error; err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Обновляем глобальную переменную message (если необходимо)
 	message = reqBody.Message
-	fmt.Fprintln(w, "Message received!")
+
+	// Отправляем подтверждение клиенту
+	fmt.Fprintln(w, "Message received and saved to the database!")
 }
 
 func main() {
+	// Вызываем метод InitDB() из файла db.go
+	InitDB()
+	// Автоматическая миграция модели Message
+	DB.AutoMigrate(&Message{})
+
 	// Создаём новый маршрутизатор
 	router := mux.NewRouter()
 	// Маршрут для GET-запроса
