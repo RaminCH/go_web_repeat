@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
 )
@@ -57,6 +59,110 @@ func MessageHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "Message received and saved to the database!")
 }
 
+// Обработчик для PATCH-запроса
+func UpdateMessageHandler(w http.ResponseWriter, r *http.Request) {
+	// Логируем начало обработки запроса
+	log.Println("PATCH request received")
+
+	// Получаем ID из URL
+	vars := mux.Vars(r)
+	idStr := vars["id"]
+	log.Println("ID from URL:", idStr)
+
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		log.Println("Invalid ID:", idStr)
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+
+	log.Println("Parsed ID:", id)
+
+	// Находим сообщение по ID
+	var message Message
+	if err := DB.First(&message, uint(id)).Error; err != nil {
+		log.Println("Message not found with ID:", id)
+		http.Error(w, "Message not found", http.StatusNotFound)
+		return
+	}
+
+	log.Println("Message found:", message)
+
+	// Парсим JSON из тела запроса
+	var reqBody requestBody
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		log.Println("Failed to decode request body:", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	log.Println("Request body parsed successfully:", reqBody)
+
+	// Обновляем текст сообщения
+	message.Text = reqBody.Message
+	log.Println("Updated message text to:", message.Text)
+
+	// Сохраняем обновление в базе данных
+	if err := DB.Save(&message).Error; err != nil {
+		log.Println("Failed to update message in database:", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Println("Message updated successfully in the database:", message)
+
+	// Возвращаем обновленное сообщение в ответе
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(message); err != nil {
+		log.Println("Failed to encode response:", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	} else {
+		log.Println("Response successfully sent to client")
+	}
+}
+
+// Обработчик для DELETE-запроса
+func DeleteMessageHandler(w http.ResponseWriter, r *http.Request) {
+	// Логируем начало обработки запроса
+	log.Println("DELETE request received")
+
+	// Получаем ID из URL
+	vars := mux.Vars(r)
+	idStr := vars["id"]
+	log.Println("ID from URL:", idStr)
+
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		log.Println("Invalid ID:", idStr)
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+
+	log.Println("Parsed ID:", id)
+
+	// Находим сообщение по ID
+	var message Message
+	if err := DB.First(&message, uint(id)).Error; err != nil {
+		log.Println("Message not found with ID:", id)
+		http.Error(w, "Message not found", http.StatusNotFound)
+		return
+	}
+
+	log.Println("Message found:", message)
+
+	// Удаляем сообщение из базы данных
+	if err := DB.Delete(&message).Error; err != nil {
+		log.Println("Failed to delete message:", err)
+		http.Error(w, "Failed to delete message", http.StatusInternalServerError)
+		return
+	}
+
+	log.Println("Message deleted successfully")
+
+	// Возвращаем подтверждение об удалении
+	w.WriteHeader(http.StatusNoContent) // Отправляем 204 No Content
+}
+
 func main() {
 	// Вызываем метод InitDB() из файла db.go
 	InitDB()
@@ -69,6 +175,12 @@ func main() {
 	router.HandleFunc("/api/hello", HelloHandler).Methods("GET")
 	// Маршрут для POST-запроса
 	router.HandleFunc("/api/message", MessageHandler).Methods("POST")
+	// Маршрут для PATCH-запроса
+	router.HandleFunc("/api/message/{id}", UpdateMessageHandler).Methods("PATCH")
+
+	// Маршрут для DELETE-запроса
+	router.HandleFunc("/api/message/{id}", DeleteMessageHandler).Methods("DELETE")
+
 	// Запускаем сервер
 	http.ListenAndServe(":8080", router)
 }
