@@ -69,16 +69,17 @@ func UpdateMessageHandler(w http.ResponseWriter, r *http.Request) {
 	idStr := vars["id"]
 	log.Println("ID from URL:", idStr)
 
+	// Преобразуем строку в число
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
 		log.Println("Invalid ID:", idStr)
-		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		http.Error(w, "Invalid ID format", http.StatusBadRequest)
 		return
 	}
 
 	log.Println("Parsed ID:", id)
 
-	// Находим сообщение по ID
+	// Попробуем найти сообщение по ID
 	var message Message
 	if err := DB.First(&message, uint(id)).Error; err != nil {
 		log.Println("Message not found with ID:", id)
